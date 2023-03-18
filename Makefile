@@ -6,6 +6,10 @@
 SHELL:=bash
 OWNER?=jupyter
 
+# docker and podman can both be used to build images,
+# podman will be preferred if possible
+DOCKER:=$(shell which podman || which docker)
+
 # Need to list the images in build dependency order
 # All of the images
 ALL_IMAGES:= \
@@ -46,9 +50,9 @@ help:
 
 build/%: DOCKER_BUILD_ARGS?=
 build/%: ## build the latest image for a stack using the system's architecture
-	docker build $(DOCKER_BUILD_ARGS) --rm --force-rm -t $(OWNER)/$(notdir $@):latest ./$(notdir $@) --build-arg OWNER=$(OWNER)
+	$(DOCKER) build $(DOCKER_BUILD_ARGS) --rm --force-rm -t $(OWNER)/$(notdir $@):latest ./$(notdir $@) --build-arg OWNER=$(OWNER)
 	@echo -n "Built image size: "
-	@docker images $(OWNER)/$(notdir $@):latest --format "{{.Size}}"
+	@$(DOCKER) images $(OWNER)/$(notdir $@):latest --format "{{.Size}}"
 build-all: $(foreach I, $(ALL_IMAGES), build/$(I)) ## build all stacks
 build-aarch64: $(foreach I, $(AARCH64_IMAGES), build/$(I)) ## build aarch64 stacks
 
@@ -62,10 +66,10 @@ check-outdated-all: $(foreach I, $(ALL_IMAGES), check-outdated/$(I)) ## check al
 cont-clean-all: cont-stop-all cont-rm-all ## clean all containers (stop + rm)
 cont-stop-all: ## stop all containers
 	@echo "Stopping all containers ..."
-	-docker stop -t0 $(shell docker ps -a -q) 2> /dev/null
+	-$(DOCKER) stop -t0 $(shell $(DOCKER) ps -a -q) 2> /dev/null
 cont-rm-all: ## remove all containers
 	@echo "Removing all containers ..."
-	-docker rm --force $(shell docker ps -a -q) 2> /dev/null
+	-$(DOCKER) rm --force $(shell $(DOCKER) ps -a -q) 2> /dev/null
 
 
 
@@ -87,13 +91,13 @@ hook-all: $(foreach I, $(ALL_IMAGES), hook/$(I)) ## run post-build hooks for all
 img-clean: img-rm-dang img-rm ## clean dangling and jupyter images
 img-list: ## list jupyter images
 	@echo "Listing $(OWNER) images ..."
-	docker images "$(OWNER)/*"
+	$(DOCKER) images "$(OWNER)/*"
 img-rm: ## remove jupyter images
 	@echo "Removing $(OWNER) images ..."
-	-docker rmi --force $(shell docker images --quiet "$(OWNER)/*") 2> /dev/null
+	-$(DOCKER) rmi --force $(shell docker images --quiet "$(OWNER)/*") 2> /dev/null
 img-rm-dang: ## remove dangling images (tagged None)
 	@echo "Removing dangling images ..."
-	-docker rmi --force $(shell docker images -f "dangling=true" -q) 2> /dev/null
+	-$(DOCKER) rmi --force $(shell docker images -f "dangling=true" -q) 2> /dev/null
 
 
 
@@ -106,21 +110,21 @@ pre-commit-install: ## set up the git hook scripts
 
 
 pull/%: ## pull a jupyter image
-	docker pull $(OWNER)/$(notdir $@)
+	$(DOCKER) pull $(OWNER)/$(notdir $@)
 pull-all: $(foreach I, $(ALL_IMAGES), pull/$(I)) ## pull all images
 
 
 push/%: ## push all tags for a jupyter image
-	docker push --all-tags $(OWNER)/$(notdir $@)
+	$(DOCKER) push --all-tags $(OWNER)/$(notdir $@)
 push-all: $(foreach I, $(ALL_IMAGES), push/$(I)) ## push all tagged images
 
 
 
 run-shell/%: ## run a bash in interactive mode in a stack
-	docker run -it --rm $(OWNER)/$(notdir $@) $(SHELL)
+	$(DOCKER) run -it --rm $(OWNER)/$(notdir $@) $(SHELL)
 
 run-sudo-shell/%: ## run a bash in interactive mode as root in a stack
-	docker run -it --rm --user root $(OWNER)/$(notdir $@) $(SHELL)
+	$(DOCKER) run -it --rm --user root $(OWNER)/$(notdir $@) $(SHELL)
 
 
 
